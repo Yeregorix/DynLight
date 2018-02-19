@@ -31,9 +31,12 @@ import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.Order;
 import org.spongepowered.api.event.entity.MoveEntityEvent;
 import org.spongepowered.api.event.filter.Getter;
+import org.spongepowered.api.event.filter.cause.Root;
+import org.spongepowered.api.event.item.inventory.ChangeInventoryEvent;
 import org.spongepowered.api.item.ItemType;
 import org.spongepowered.api.item.ItemTypes;
 import org.spongepowered.api.item.inventory.ItemStack;
+import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 
 import java.util.HashMap;
@@ -44,41 +47,46 @@ public final class PlayerListener {
 	private final Map<UUID, Vector3i> fakeBlocks = new HashMap<>();
 
 	@Listener(order = Order.LATE)
-	public void onPlayerMove(MoveEntityEvent e, @Getter("getTargetEntity") Player p) {
-		Transform<World> from = e.getFromTransform();
-		Transform<World> to = e.getToTransform();
+	public void onPlayerChangeHeld(ChangeInventoryEvent.Held e, @Root Player p) {
+		update(p, p.getLocation());
+	}
 
-		if (!from.getPosition().toInt().equals(to.getPosition().toInt())) {
-			Vector3i lastPos = this.fakeBlocks.get(p.getUniqueId());
-			if (lastPos != null)
-				p.resetBlockChange(lastPos);
+	private void update(Player p, Location<World> loc) {
+		Vector3i lastPos = this.fakeBlocks.get(p.getUniqueId()), newPos = null;
+		ItemType hand = p.getItemInHand(HandTypes.MAIN_HAND).map(ItemStack::getType).orElse(ItemTypes.NONE);
 
-			Vector3i newPos = null;
-			ItemType hand = p.getItemInHand(HandTypes.MAIN_HAND).map(ItemStack::getType).orElse(ItemTypes.NONE);
+		Config.Immutable cfg = DynLight.get().getConfig();
+		BlockType fakeBlock = cfg.getApplicableType(hand).orElse(null);
 
-			Config.Immutable cfg = DynLight.get().getConfig();
-			BlockType fakeBlock = cfg.getApplicableType(hand).orElse(null);
+		if (fakeBlock != null && p.hasPermission("dynlight.item." + hand.getId())) {
+			World w = loc.getExtent();
+			newPos = loc.getPosition().toInt();
 
-			if (fakeBlock != null && p.hasPermission("dynlight.item." + hand.getId())) {
-				World w = to.getExtent();
-				newPos = to.getPosition().toInt();
-
-				BlockType type = w.getBlockType(newPos);
-				if (!cfg.canBeReplaced(type)) {
-					newPos = newPos.add(0, 1, 0);
-					type = w.getBlockType(newPos);
-					if (!cfg.canBeReplaced(type))
-						newPos = null;
-				}
-			}
-
-
-			if (newPos == null)
-				this.fakeBlocks.remove(p.getUniqueId());
-			else {
-				this.fakeBlocks.put(p.getUniqueId(), newPos);
-				p.sendBlockChange(newPos, fakeBlock.getDefaultState());
+			BlockType type = w.getBlockType(newPos);
+			if (!cfg.canBeReplaced(type)) {
+				newPos = newPos.add(0, 1, 0);
+				type = w.getBlockType(newPos);
+				if (!cfg.canBeReplaced(type))
+					newPos = null;
 			}
 		}
+
+		if (newPos == null)
+			this.fakeBlocks.remove(p.getUniqueId());
+		else {
+			this.fakeBlocks.put(p.getUniqueId(), newPos);
+			p.sendBlockChange(newPos, fakeBlock.getDefaultState());
+		}
+
+		if (lastPos != null && !lastPos.equals(newPos))
+			p.resetBlockChange(lastPos);
+	}
+
+	@Listener(order = Order.LATE)
+	public void onPlayerMove(MoveEntityEvent e, @Getter("getTargetEntity") Player p) {
+		Transform<World> to = e.getToTransform();
+
+		if (!e.getFromTransform().getPosition().toInt().equals(to.getPosition().toInt()))
+			update(p, to.getLocation());
 	}
 }
