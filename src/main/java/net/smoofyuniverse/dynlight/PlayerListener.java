@@ -51,14 +51,26 @@ public final class PlayerListener {
 		update(p, p.getLocation());
 	}
 
+	@Listener(order = Order.LATE)
+	public void onPlayerSwapHand(ChangeInventoryEvent.SwapHand e, @Root Player p) {
+		update(p, p.getLocation());
+	}
+
 	private void update(Player p, Location<World> loc) {
 		Vector3i lastPos = this.fakeBlocks.get(p.getUniqueId()), newPos = null;
-		ItemType hand = p.getItemInHand(HandTypes.MAIN_HAND).map(ItemStack::getType).orElse(ItemTypes.NONE);
-
 		Config.Immutable cfg = DynLight.get().getConfig();
-		BlockType fakeBlock = cfg.getApplicableType(hand).orElse(null);
 
-		if (fakeBlock != null && p.hasPermission("dynlight.item." + hand.getId())) {
+		ItemType hand1 = p.getItemInHand(HandTypes.MAIN_HAND).map(ItemStack::getType).orElse(ItemTypes.NONE);
+		ItemType hand2 = p.getItemInHand(HandTypes.OFF_HAND).map(ItemStack::getType).orElse(ItemTypes.NONE);
+
+		BlockType fakeBlock = cfg.getApplicableType(hand1).orElse(null);
+		if (fakeBlock == null || !p.hasPermission("dynlight.item." + hand1.getId())) {
+			fakeBlock = cfg.getApplicableType(hand2).orElse(null);
+			if (fakeBlock != null && !p.hasPermission("dynlight.item." + hand2.getId()))
+				fakeBlock = null;
+		}
+
+		if (fakeBlock != null) {
 			World w = loc.getExtent();
 			newPos = loc.getPosition().toInt();
 
