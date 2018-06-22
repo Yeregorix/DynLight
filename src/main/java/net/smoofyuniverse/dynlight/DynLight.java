@@ -26,7 +26,6 @@ import com.google.inject.Inject;
 import ninja.leaping.configurate.ConfigurationNode;
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
-import ninja.leaping.configurate.objectmapping.ObjectMappingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongepowered.api.Game;
@@ -66,6 +65,7 @@ public final class DynLight {
 	private Path configFile;
 
 	private Config.Immutable config;
+	private PlayerListener listener;
 
 	public DynLight() {
 		if (instance != null)
@@ -75,69 +75,76 @@ public final class DynLight {
 
 	@Listener
 	public void onGamePostInit(GamePostInitializationEvent e) {
-		loadConfigAndListener();
+		load();
 	}
 
-	private void loadConfigAndListener() {
-		boolean loadListener = this.config == null;
+	public void load() {
+		if (this.listener == null)
+			this.listener = new PlayerListener();
+		else
+			this.game.getEventManager().unregisterListeners(this.listener);
 
+		if (loadConfig())
+			this.game.getEventManager().registerListeners(this, this.listener);
+	}
+
+	public boolean loadConfig() {
 		try {
-			loadConfig();
-		} catch (Exception ex) {
-			LOGGER.error("Failed to load configuration", ex);
-			return;
-		}
+			LOGGER.info("Loading configuration ..");
 
-		if (loadListener)
-			Sponge.getGame().getEventManager().registerListeners(this, new PlayerListener());
+			CommentedConfigurationNode root = this.configLoader.load();
+			int version = root.getNode("Version").getInt();
+			if ((version > CURRENT_CONFIG_VERSION || version < MINIMUM_CONFIG_VERSION) && backupFile(this.configFile)) {
+				LOGGER.info("Your config version is not supported. A new one will be generated.");
+				root = this.configLoader.createEmptyNode();
+			}
+
+			ConfigurationNode cfgNode = root.getNode("Config");
+			Config cfg = cfgNode.getValue(Config.TOKEN, new Config());
+
+			if (cfg.torch == null) {
+				cfg.torch = new HashSet<>();
+
+				for (ItemType type : Sponge.getRegistry().getAllOf(ItemType.class)) {
+					int v = type.getBlock().orElse(BlockTypes.AIR).getProperty(LightEmissionProperty.class).map(LightEmissionProperty::getValue).orElse(0);
+					if (v > 7)
+						cfg.torch.add(type);
+				}
+			}
+
+			if (cfg.redtone_torch == null) {
+				cfg.redtone_torch = new HashSet<>();
+
+				for (ItemType type : Sponge.getRegistry().getAllOf(ItemType.class)) {
+					int v = type.getBlock().orElse(BlockTypes.AIR).getProperty(LightEmissionProperty.class).map(LightEmissionProperty::getValue).orElse(0);
+					if (v > 2 && v <= 7)
+						cfg.redtone_torch.add(type);
+				}
+			}
+
+			if (cfg.blacklist == null) {
+				cfg.blacklist = new HashSet<>();
+				Collections.addAll(cfg.blacklist, BlockTypes.WEB, BlockTypes.LADDER, BlockTypes.VINE, BlockTypes.WATER, BlockTypes.LAVA, BlockTypes.FLOWING_WATER, BlockTypes.FLOWING_LAVA);
+			}
+
+			cfg.blacklist.removeIf(type -> !type.getProperty(PassableProperty.class).map(PassableProperty::getValue).orElse(false));
+
+			version = CURRENT_CONFIG_VERSION;
+			root.getNode("Version").setValue(version);
+			cfgNode.setValue(Config.TOKEN, cfg);
+			this.configLoader.save(root);
+
+			this.config = cfg.toImmutable();
+			return true;
+		} catch (Exception e) {
+			LOGGER.error("Failed to load configuration", e);
+			return false;
+		}
 	}
 
-	public void loadConfig() throws IOException, ObjectMappingException {
-		LOGGER.info("Loading configuration ..");
-
-		CommentedConfigurationNode root = this.configLoader.load();
-		int version = root.getNode("Version").getInt();
-		if ((version > CURRENT_CONFIG_VERSION || version < MINIMUM_CONFIG_VERSION) && backupFile(this.configFile)) {
-			LOGGER.info("Your config version is not supported. A new one will be generated.");
-			root = this.configLoader.createEmptyNode();
-		}
-
-		ConfigurationNode cfgNode = root.getNode("Config");
-		Config cfg = cfgNode.getValue(Config.TOKEN, new Config());
-
-		if (cfg.torch == null) {
-			cfg.torch = new HashSet<>();
-
-			for (ItemType type : Sponge.getRegistry().getAllOf(ItemType.class)) {
-				int v = type.getBlock().orElse(BlockTypes.AIR).getProperty(LightEmissionProperty.class).map(LightEmissionProperty::getValue).orElse(0);
-				if (v > 7)
-					cfg.torch.add(type);
-			}
-		}
-
-		if (cfg.redtone_torch == null) {
-			cfg.redtone_torch = new HashSet<>();
-
-			for (ItemType type : Sponge.getRegistry().getAllOf(ItemType.class)) {
-				int v = type.getBlock().orElse(BlockTypes.AIR).getProperty(LightEmissionProperty.class).map(LightEmissionProperty::getValue).orElse(0);
-				if (v > 2 && v <= 7)
-					cfg.redtone_torch.add(type);
-			}
-		}
-
-		if (cfg.blacklist == null) {
-			cfg.blacklist = new HashSet<>();
-			Collections.addAll(cfg.blacklist, BlockTypes.WEB, BlockTypes.LADDER, BlockTypes.VINE, BlockTypes.WATER, BlockTypes.LAVA, BlockTypes.FLOWING_WATER, BlockTypes.FLOWING_LAVA);
-		}
-
-		cfg.blacklist.removeIf(type -> !type.getProperty(PassableProperty.class).map(PassableProperty::getValue).orElse(false));
-
-		version = CURRENT_CONFIG_VERSION;
-		root.getNode("Version").setValue(version);
-		cfgNode.setValue(Config.TOKEN, cfg);
-		this.configLoader.save(root);
-
-		this.config = cfg.toImmutable();
+	@Listener
+	public void onGameReload(GameReloadEvent e) {
+		load();
 	}
 
 	public static boolean backupFile(Path file) throws IOException {
@@ -153,11 +160,6 @@ public final class DynLight {
 		}
 		Files.move(file, backup);
 		return true;
-	}
-
-	@Listener
-	public void onGameReload(GameReloadEvent e) {
-		loadConfigAndListener();
 	}
 
 	public PluginContainer getContainer() {
