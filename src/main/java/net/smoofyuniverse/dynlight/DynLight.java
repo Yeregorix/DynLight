@@ -26,6 +26,7 @@ import com.google.inject.Inject;
 import ninja.leaping.configurate.ConfigurationNode;
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
+import org.bstats.sponge.MetricsLite2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongepowered.api.Game;
@@ -63,6 +64,8 @@ public final class DynLight {
 	@Inject
 	@DefaultConfig(sharedRoot = true)
 	private Path configFile;
+	@Inject
+	private MetricsLite2 metrics;
 
 	private Config.Immutable config;
 	private PlayerListener listener;
