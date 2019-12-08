@@ -112,13 +112,13 @@ public final class DynLight {
 				}
 			}
 
-			if (cfg.redtone_torch == null) {
-				cfg.redtone_torch = new HashSet<>();
+			if (cfg.redstone_torch == null) {
+				cfg.redstone_torch = new HashSet<>();
 
 				for (ItemType type : Sponge.getRegistry().getAllOf(ItemType.class)) {
 					int v = type.getBlock().orElse(BlockTypes.AIR).getProperty(LightEmissionProperty.class).map(LightEmissionProperty::getValue).orElse(0);
 					if (v > 2 && v <= 7)
-						cfg.redtone_torch.add(type);
+						cfg.redstone_torch.add(type);
 				}
 			}
 

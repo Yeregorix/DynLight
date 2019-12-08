@@ -39,17 +39,17 @@ import java.util.Set;
 public class Config {
 	public static final TypeToken<Config> TOKEN = TypeToken.of(Config.class);
 
-	@Setting(value = "torch", comment = "Items that should emit dynamic light when in hand, (using a fake torch)")
+	@Setting(value = "torch", comment = "Items that should emit dynamic light when in hand (using a fake torch).")
 	public Set<ItemType> torch;
 
-	@Setting(value = "redtone_torch", comment = "Items that should emit dynamic light when in hand, (using a fake redstone torch)")
-	public Set<ItemType> redtone_torch;
+	@Setting(value = "redtone_torch", comment = "Items that should emit dynamic light when in hand (using a fake redstone torch).")
+	public Set<ItemType> redstone_torch;
 
 	@Setting(value = "blacklist", comment = "Blocks that should not be replaced by a torch even if passable.")
 	public Set<BlockType> blacklist;
 
 	public Immutable toImmutable() {
-		return new Immutable(this.torch, this.redtone_torch, this.blacklist);
+		return new Immutable(this.torch, this.redstone_torch, this.blacklist);
 	}
 
 	public static class Immutable {
